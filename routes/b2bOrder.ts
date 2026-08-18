@@ -13,10 +13,45 @@ import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import * as utils from '../lib/utils'
 
+function isCodeSafe (code: string): boolean {
+  const lower = code.toLowerCase()
+  const forbidden = [
+    'constructor', 'prototype', '__proto__', 'global', 'process', 'require',
+    'exec', 'spawn', 'function', 'import', 'eval', 'fs', 'child_process', 'os',
+    'path', 'reflect', 'proxy', 'symbol', 'mainmodule', 'currenttarget', 'view',
+    'window', 'document', 'this', 'globalthis', 'self', 'top', 'parent', 'frames',
+    'arguments', 'object', 'module', 'exports', 'settimeout', 'setinterval',
+    'setimmediate', 'cleartimeout', 'clearinterval', 'clearimmediate', 'array',
+    'string', 'number', 'boolean', 'regexp', 'error'
+  ]
+  for (const word of forbidden) {
+    if (lower.includes(word)) {
+      return false
+    }
+  }
+  // Block any backslash to be completely safe against escape tricks
+  if (code.includes('\\')) {
+    return false
+  }
+  // Block template literals (backticks)
+  if (code.includes('`')) {
+    return false
+  }
+  // Block computed property access via bracket notation
+  if (/([a-zA-Z0-9_$)"'\`\]}{])\s*\[/.test(code)) {
+    return false
+  }
+  return true
+}
+
 export function b2bOrder () {
   return ({ body }: Request, res: Response, next: NextFunction) => {
     if (utils.isChallengeEnabled(challenges.rceChallenge) || utils.isChallengeEnabled(challenges.rceOccupyChallenge)) {
       const orderLinesData = body.orderLinesData || ''
+      if (!isCodeSafe(orderLinesData)) {
+        next(new Error('Blocked potential malicious code execution'))
+        return
+      }
       try {
         const sandbox = { safeEval, orderLinesData }
         vm.createContext(sandbox)
