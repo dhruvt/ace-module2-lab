@@ -14,11 +14,32 @@ import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import { UserModel } from '../models/user'
 import * as utils from '../lib/utils'
+// @ts-expect-error FIXME due to non-existing type definitions for notevil
+import { eval as safeEval } from 'notevil'
 
 const entities = new Entities()
 
 function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
+}
+
+function isCodeSafe (code: string): boolean {
+  const lower = code.toLowerCase()
+  const forbidden = [
+    'constructor', 'prototype', '__proto__', 'global', 'process', 'require',
+    'exec', 'spawn', 'function', 'import', 'eval', 'fs', 'child_process', 'os',
+    'path', 'reflect', 'proxy', 'symbol', 'mainmodule', 'currenttarget', 'view',
+    'window', 'document', 'this'
+  ]
+  for (const word of forbidden) {
+    if (lower.includes(word)) {
+      return false
+    }
+  }
+  if (/\\[xu]/i.test(code)) {
+    return false
+  }
+  return true
 }
 
 export function getUserProfile () {
@@ -58,7 +79,10 @@ export function getUserProfile () {
         if (!code) {
           throw new Error('Username is null')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        if (!isCodeSafe(code)) {
+          throw new Error('Blocked potential malicious code execution')
+        }
+        username = safeEval(code)
       } catch (err) {
         username = '\\' + username
       }
